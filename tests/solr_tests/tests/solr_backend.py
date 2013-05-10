@@ -330,8 +330,8 @@ class SolrSearchBackendTestCase(TestCase):
         self.assertEqual(self.sb.search('indax')['spelling_suggestion'], 'index')
         self.assertEqual(self.sb.search('Indx', spelling_query='indexy')['spelling_suggestion'], 'index')
 
-        self.assertEqual(self.sb.search('', facets=['name']), {'hits': 0, 'results': []})
-        results = self.sb.search('Index', facets=['name'])
+        self.assertEqual(self.sb.search('', facets={'name': {}}), {'hits': 0, 'results': []})
+        results = self.sb.search('Index', facets={'name': {}})
         self.assertEqual(results['hits'], 3)
         self.assertEqual(results['facets']['fields']['name'], [('daniel1', 1), ('daniel2', 1), ('daniel3', 1)])
 
@@ -345,6 +345,11 @@ class SolrSearchBackendTestCase(TestCase):
         results = self.sb.search('Index', query_facets=[('name', '[* TO e]')])
         self.assertEqual(results['hits'], 3)
         self.assertEqual(results['facets']['queries'], {'name:[* TO e]': 3})
+
+        self.assertEqual(self.sb.search('', stats={}), {'hits':0,'results':[]})
+        results = self.sb.search('*:*', stats={'name':['name']})
+        self.assertEqual(results['hits'], 3)
+        self.assertEqual(results['stats']['name']['count'], 3)
 
         self.assertEqual(self.sb.search('', narrow_queries=set(['name:daniel1'])), {'hits': 0, 'results': []})
         results = self.sb.search('Index', narrow_queries=set(['name:daniel1']))

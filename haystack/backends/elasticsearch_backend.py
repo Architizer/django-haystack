@@ -222,9 +222,6 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
                 # a ``query`` root object. :/
                 query = {'query_string': {'query': " OR ".join(models_to_delete)}}
                 self.conn.delete_by_query(self.index_name, 'modelresult', query)
-
-            if commit:
-                self.conn.refresh(index=self.index_name)
         except (requests.RequestException, pyelasticsearch.ElasticHttpError), e:
             if not self.silently_fail:
                 raise
@@ -315,8 +312,16 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
                 }
             }
 
-        if self.include_spelling is True:
-            warnings.warn("Elasticsearch does not handle spelling suggestions.", Warning, stacklevel=2)
+        if self.include_spelling:
+            kwargs['suggest'] = {
+                'suggest': {
+                    'text': spelling_query or query_string,
+                    'term': {
+                        # Using content_field here will result in suggestions of stemmed words.
+                        'field': '_all',
+                    },
+                },
+            }
 
         if narrow_queries is None:
             narrow_queries = set()
@@ -324,13 +329,21 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
         if facets is not None:
             kwargs.setdefault('facets', {})
 
-            for facet_fieldname in facets:
-                kwargs['facets'][facet_fieldname] = {
+            for facet_fieldname, extra_options in facets.items():
+                facet_options = {
                     'terms': {
                         'field': facet_fieldname,
                         'size': 100,
                     },
                 }
+                # Special cases for options applied at the facet level (not the terms level).
+                if extra_options.pop('global_scope', False):
+                    # Renamed "global_scope" since "global" is a python keyword.
+                    facet_options['global'] = True
+                if 'facet_filter' in extra_options:
+                    facet_options['facet_filter'] = extra_options.pop('facet_filter')
+                facet_options['terms'].update(extra_options)
+                kwargs['facets'][facet_fieldname] = facet_options
 
         if date_facets is not None:
             kwargs.setdefault('facets', {})
@@ -553,6 +566,10 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
 
         if result_class is None:
             result_class = SearchResult
+
+        if self.include_spelling and 'suggest' in raw_results:
+            raw_suggest = raw_results['suggest']['suggest']
+            spelling_suggestion = ' '.join([word['text'] if len(word['options']) == 0 else word['options'][0]['text'] for word in raw_suggest])
 
         if 'facets' in raw_results:
             facets = {
@@ -892,7 +909,7 @@ class ElasticsearchSearchQuery(BaseSearchQuery):
             search_kwargs['end_offset'] = self.end_offset
 
         if self.facets:
-            search_kwargs['facets'] = list(self.facets)
+            search_kwargs['facets'] = self.facets
 
         if self.fields:
             search_kwargs['fields'] = self.fields
@@ -936,6 +953,7 @@ class ElasticsearchSearchQuery(BaseSearchQuery):
         search_kwargs = {
             'start_offset': self.start_offset,
             'result_class': self.result_class,
+            'models': self.models
         }
 
         if self.end_offset is not None:
