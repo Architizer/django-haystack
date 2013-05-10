@@ -10,3 +10,4 @@ MANIFEST
 
 # Because I'm ghetto like that.
 tests/pyelasticsearch.py
+sftp-config.json

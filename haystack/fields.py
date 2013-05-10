@@ -127,7 +127,14 @@ class SearchField(object):
             template_names = ['search/indexes/%s/%s_%s.txt' % (obj._meta.app_label, obj._meta.module_name, self.instance_name)]
 
         t = loader.select_template(template_names)
-        return t.render(Context({'object': obj}))
+
+        try:
+            rendered = t.render(Context({'object': obj}))
+        except Exception as e:
+            print e
+            rendered = ""
+
+        return rendered
 
     def convert(self, value):
         """
