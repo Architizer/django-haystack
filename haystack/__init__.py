@@ -51,7 +51,7 @@ signal_processor_path = getattr(settings, 'HAYSTACK_SIGNAL_PROCESSOR', 'haystack
 signal_processor_class = loading.import_class(signal_processor_path)
 signal_processor = signal_processor_class(connections, connection_router)
 
-default_search_result_path = settings.get('HAYSTACK_DEFAULT_SEARCH_RESULT', 'haystack.models.SearchResult')
+default_search_result_path = getattr(settings, 'HAYSTACK_DEFAULT_SEARCH_RESULT', 'haystack.models.SearchResult')
 DEFAULT_SEARCH_RESULT = loading.import_class(default_search_result_path)
 
 # Per-request, reset the ghetto query log.
