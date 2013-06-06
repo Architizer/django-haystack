@@ -12,7 +12,7 @@ from django.conf import settings
 from django.test import TestCase
 from haystack import connections, reset_search_queries
 from haystack import indexes
-from haystack.inputs import AutoQuery, AltParser
+from haystack.inputs import AutoQuery, AltParser, Raw
 from haystack.models import SearchResult
 from haystack.query import SearchQuerySet, RelatedSearchQuerySet, SQ
 from haystack.utils.loading import UnifiedIndex
@@ -401,6 +401,17 @@ class SolrSearchBackendTestCase(TestCase):
         results = new_q.get_results()
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].id, 'core.mockmodel.1')
+
+    def test_raw_query(self):
+        self.sb.update(self.smmi, self.sample_objs)
+
+        # Ensure that the raw bits have proper parenthesis.
+        new_q = self.sq._clone()
+        new_q._reset()
+        new_q.add_filter(SQ(content=Raw("{!dismax qf='title^2 text' mm=1}my query")))
+
+        results = new_q.get_results()
+        self.assertEqual(len(results), 0)
 
     def test_altparser_quoting(self):
         test_objs = [
@@ -849,6 +860,11 @@ class LiveSolrSearchQuerySetTestCase(TestCase):
         self.assertTrue(isinstance(sqs, SearchQuerySet))
         self.assertEqual(repr(sqs.query.query_filter), '<SQ: AND content__contains="pants:rule">')
         self.assertEqual(sqs.query.build_query(), u'("pants\\:rule")')
+        self.assertEqual(len(sqs), 0)
+
+        sqs = self.sqs.auto_query('Canon+PowerShot+ELPH+(Black)')
+        self.assertEqual(sqs.query.build_query(), u'Canon\\+PowerShot\\+ELPH\\+\\(Black\\)')
+        sqs = sqs.filter(tags__in=['cameras', 'electronics'])
         self.assertEqual(len(sqs), 0)
 
     # Regressions

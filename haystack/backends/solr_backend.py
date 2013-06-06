@@ -5,7 +5,7 @@ from django.db.models.loading import get_model
 from haystack.backends import BaseEngine, BaseSearchBackend, BaseSearchQuery, log_query, EmptyResults
 from haystack.constants import ID, DJANGO_CT, DJANGO_ID
 from haystack.exceptions import MissingDependency, MoreLikeThisError
-from haystack.inputs import PythonData, Clean, Exact
+from haystack.inputs import PythonData, Clean, Exact, Raw
 from haystack.models import SearchResult
 from haystack.utils import get_identifier
 from haystack.utils import log as logging
@@ -29,7 +29,7 @@ class SolrSearchBackend(BaseSearchBackend):
     # The '\\' must come first, so as not to overwrite the other slash replacements.
     RESERVED_CHARACTERS = (
         '\\', '+', '-', '&&', '||', '!', '(', ')', '{', '}',
-        '[', ']', '^', '"', '~', '*', '?', ':',
+        '[', ']', '^', '"', '~', '*', '?', ':', '/',
     )
 
     def __init__(self, connection_alias, **connection_options):
@@ -603,8 +603,9 @@ class SolrSearchQuery(BaseSearchQuery):
 
                 query_frag = filter_types[filter_type] % prepared_value
 
-        if len(query_frag) and not query_frag.startswith('(') and not query_frag.endswith(')'):
-            query_frag = "(%s)" % query_frag
+        if len(query_frag) and not isinstance(value, Raw):
+            if not query_frag.startswith('(') and not query_frag.endswith(')'):
+                query_frag = "(%s)" % query_frag
 
         return u"%s%s" % (index_fieldname, query_frag)
 
