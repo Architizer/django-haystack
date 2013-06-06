@@ -13,6 +13,8 @@ from haystack.models import SearchResult
 from haystack.utils import get_identifier
 from haystack.utils import log as logging
 
+from pprint import pprint
+
 try:
     import requests
 except ImportError:
@@ -125,15 +127,26 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
             }
         }
 
+        pprint(current_mapping)
+
         if current_mapping != self.existing_mapping:
             try:
                 # Make sure the index is there first.
                 self.conn.create_index(self.index_name, self.DEFAULT_SETTINGS)
+            except Exception as e:
+                print 'error creating index'
+                print e
+            try:
                 self.conn.put_mapping(self.index_name, 'modelresult', current_mapping)
                 self.existing_mapping = current_mapping
-            except Exception:
-                if not self.silently_fail:
-                    raise
+            except Exception as e:
+                print 'error updating mapping'
+                print e
+
+                # if not self.silently_fail:
+                #     raise
+
+        print self.existing_mapping
 
         self.setup_complete = True
 
