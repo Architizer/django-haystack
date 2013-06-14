@@ -6,9 +6,9 @@ from django.db.models import Q
 from django.db.models.base import ModelBase
 from django.utils import tree
 from django.utils.encoding import force_unicode
+from haystack import DEFAULT_SEARCH_RESULT
 from haystack.constants import VALID_FILTERS, FILTER_SEPARATOR, DEFAULT_ALIAS
 from haystack.exceptions import MoreLikeThisError, FacetingError, StatsError
-from haystack.models import SearchResult
 from haystack.utils.loading import UnifiedIndex
 
 VALID_GAPS = ['year', 'month', 'day', 'hour', 'minute', 'second']
@@ -109,9 +109,9 @@ class BaseSearchBackend(object):
         The query should be a string that is appropriate syntax for the backend.
 
         The returned dictionary should contain the keys 'results' and 'hits'.
-        The 'results' value should be an iterable of populated SearchResult
-        objects. The 'hits' should be an integer count of the number of matched
-        results the search backend found.
+        The 'results' value should be an iterable of populated instances of
+        ``DEFAULT_SEARCH_RESULT``. The 'hits' should be an integer count of the
+        number of matched results the search backend found.
 
         This method MUST be implemented by each backend, as it will be highly
         specific to each one.
@@ -314,7 +314,7 @@ class BaseSearchQuery(object):
         self._facet_counts = None
         self._stats = None
         self._spelling_suggestion = None
-        self.result_class = SearchResult
+        self.result_class = DEFAULT_SEARCH_RESULT
         self.stats = {}
         from haystack import connections
         self._using = using
@@ -780,10 +780,10 @@ class BaseSearchQuery(object):
         Sets the result class to use for results.
 
         Overrides any previous usages. If ``None`` is provided, Haystack will
-        revert back to the default ``SearchResult`` object.
+        revert back to the default object.
         """
         if klass is None:
-            klass = SearchResult
+            klass = DEFAULT_SEARCH_RESULT
 
         self.result_class = klass
 

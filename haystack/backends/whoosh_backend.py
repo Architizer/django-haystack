@@ -8,6 +8,7 @@ from django.core.exceptions import ImproperlyConfigured
 from django.db.models.loading import get_model
 from django.utils.datetime_safe import datetime
 from django.utils.encoding import force_unicode
+from haystack import DEFAULT_SEARCH_RESULT
 from haystack.backends import BaseEngine, BaseSearchBackend, BaseSearchQuery, log_query, EmptyResults
 from haystack.constants import ID, DJANGO_CT, DJANGO_ID
 from haystack.exceptions import MissingDependency, SearchBackendError
@@ -561,7 +562,7 @@ class WhooshSearchBackend(BaseSearchBackend):
         hits = len(raw_page)
 
         if result_class is None:
-            result_class = SearchResult
+            result_class = DEFAULT_SEARCH_RESULT
 
         facets = {}
         spelling_suggestion = None
