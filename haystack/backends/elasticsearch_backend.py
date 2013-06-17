@@ -127,26 +127,25 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
             }
         }
 
-        pprint(current_mapping)
 
         if current_mapping != self.existing_mapping:
             try:
                 # Make sure the index is there first.
                 self.conn.create_index(self.index_name, self.DEFAULT_SETTINGS)
             except Exception as e:
-                print 'error creating index'
-                print e
+                # print 'error creating index'
+                # print e
+                pass
             try:
                 self.conn.put_mapping(self.index_name, 'modelresult', current_mapping)
                 self.existing_mapping = current_mapping
             except Exception as e:
-                print 'error updating mapping'
-                print e
+                # print 'error updating mapping'
+                # print e
+                pass
 
                 # if not self.silently_fail:
                 #     raise
-
-        print self.existing_mapping
 
         self.setup_complete = True
 
