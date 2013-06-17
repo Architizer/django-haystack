@@ -5,6 +5,7 @@ from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
 from django.db.models.loading import get_model
 import haystack
+from haystack import DEFAULT_SEARCH_RESULT
 from haystack.backends import BaseEngine, BaseSearchBackend, BaseSearchQuery, log_query
 from haystack.constants import ID, DJANGO_CT, DJANGO_ID, DEFAULT_OPERATOR
 from haystack.exceptions import MissingDependency, MoreLikeThisError
@@ -529,7 +530,7 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
 
         return self._process_results(raw_results,
             highlight=kwargs.get('highlight'),
-            result_class=kwargs.get('result_class', SearchResult),
+            result_class=kwargs.get('result_class', DEFAULT_SEARCH_RESULT),
             distance_point=kwargs.get('distance_point'), geo_sort=geo_sort)
 
     def more_like_this(self, model_instance, additional_query_string=None,
@@ -577,7 +578,7 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
         spelling_suggestion = None
 
         if result_class is None:
-            result_class = SearchResult
+            result_class = DEFAULT_SEARCH_RESULT
 
         if self.include_spelling and 'suggest' in raw_results:
             raw_suggest = raw_results['suggest']['suggest']
