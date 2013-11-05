@@ -26,6 +26,10 @@ except ImportError:
     raise MissingDependency("The 'elasticsearch' backend requires the installation of 'pyelasticsearch'. Please refer to the documentation.")
 
 
+import pprint
+pp = pprint.PrettyPrinter(indent=4)
+
+
 DATETIME_REGEX = re.compile(
     r'^(?P<year>\d{4})-(?P<month>\d{2})-(?P<day>\d{2})T'
     r'(?P<hour>\d{2}):(?P<minute>\d{2}):(?P<second>\d{2})(\.\d+)?$')
@@ -128,25 +132,41 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
             }
         }
 
+        
+        #pp.pprint(self.DEFAULT_SETTINGS)
+
+        try:
+            # Make sure the index is there first.
+            self.conn.create_index(self.index_name, self.DEFAULT_SETTINGS)
+            print('success creating index')
+        except Exception as e:
+            print('error creating index')
+            print(e)
+            if not self.silently_fail:
+                raise
+
+        try:
+            # Make sure the update settings.
+            self.conn.close_index(self.index_name)
+            self.conn.update_settings(self.index_name, self.DEFAULT_SETTINGS)
+            self.conn.open_index(self.index_name)
+            print('success updating settings')
+        except Exception as e:
+            print('error updating settings')
+            print(e)
+            if not self.silently_fail:
+                raise
 
         if current_mapping != self.existing_mapping:
             try:
-                # Make sure the index is there first.
-                self.conn.create_index(self.index_name, self.DEFAULT_SETTINGS)
-            except Exception as e:
-                # print 'error creating index'
-                # print e
-                pass
-            try:
                 self.conn.put_mapping(self.index_name, 'modelresult', current_mapping)
                 self.existing_mapping = current_mapping
+                print('success updating mapping')
             except Exception as e:
-                # print 'error updating mapping'
-                # print e
-                pass
-
-                # if not self.silently_fail:
-                #     raise
+                print('error updating mapping')
+                print(e)
+                if not self.silently_fail:
+                    raise
 
         self.setup_complete = True
 
@@ -174,6 +194,7 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
 
                 prepped_docs.append(final_data)
             except (requests.RequestException, pyelasticsearch.ElasticHttpError), e:
+                print e
                 if not self.silently_fail:
                     raise
 
@@ -187,7 +208,10 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
                     }
                 })
 
-        self.conn.bulk_index(self.index_name, 'modelresult', prepped_docs, id_field=ID)
+        try:
+            self.conn.bulk_index(self.index_name, 'modelresult', prepped_docs, id_field=ID)
+        except Exception as e:
+            print e
 
         if commit:
             self.conn.refresh(index=self.index_name)
@@ -516,6 +540,9 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
         start_offset = kwargs.get('start_offset', 0)
         if end_offset is not None and end_offset > start_offset:
             search_kwargs['size'] = end_offset - start_offset
+
+        pp.pprint('search_kwargs')
+        pp.pprint(search_kwargs)
 
         try:
             raw_results = self.conn.search(search_kwargs,
