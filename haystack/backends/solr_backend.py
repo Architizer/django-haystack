@@ -140,7 +140,7 @@ class SolrSearchBackend(BaseSearchBackend):
                             narrow_queries=None, spelling_query=None,
                             within=None, dwithin=None, distance_point=None,
                             models=None, limit_to_registered_models=None,
-                            result_class=None, stats=None):
+                            result_class=None, stats=None, shards=None):
         kwargs = {'fl': '* score'}
 
         if fields:
@@ -269,6 +269,9 @@ class SolrSearchBackend(BaseSearchBackend):
             # time yet.
             # kwargs['fl'] += ' _dist_:geodist()'
             pass
+
+        if shards is not None:
+            kwargs['shards'] = shards
 
         return kwargs
 
@@ -684,6 +687,9 @@ class SolrSearchQuery(BaseSearchQuery):
 
         if self.stats:
             search_kwargs['stats'] = self.stats
+
+        if self.shards:
+            search_kwargs['shards'] = ','.join(self.shards)
 
         return search_kwargs
 
