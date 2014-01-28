@@ -6,7 +6,7 @@ from django.db.models import Q
 from django.db.models.base import ModelBase
 from django.utils import tree
 from django.utils.encoding import force_unicode
-from haystack import DEFAULT_SEARCH_RESULT
+from haystack import DEFAULT_SEARCH_RESULT, SPELLCHECK_MAX_COLLATIONS
 from haystack.constants import VALID_FILTERS, FILTER_SEPARATOR, DEFAULT_ALIAS
 from haystack.exceptions import MoreLikeThisError, FacetingError, StatsError
 from haystack.utils.loading import UnifiedIndex
@@ -67,6 +67,7 @@ class BaseSearchBackend(object):
         self.connection_alias = connection_alias
         self.timeout = connection_options.get('TIMEOUT', 10)
         self.include_spelling = connection_options.get('INCLUDE_SPELLING', False)
+        self.spellcheck_max_collations = SPELLCHECK_MAX_COLLATIONS
         self.batch_size = connection_options.get('BATCH_SIZE', 1000)
         self.silently_fail = connection_options.get('SILENTLY_FAIL', True)
         self.distance_available = connection_options.get('DISTANCE_AVAILABLE', False)
@@ -314,6 +315,7 @@ class BaseSearchQuery(object):
         self._facet_counts = None
         self._stats = None
         self._spelling_suggestion = None
+        self._raw_spelling_suggestions = None
         self.result_class = DEFAULT_SEARCH_RESULT
         self.stats = {}
         from haystack import connections
@@ -406,6 +408,7 @@ class BaseSearchQuery(object):
         self._hit_count = results.get('hits', 0)
         self._facet_counts = self.post_process_facets(results)
         self._spelling_suggestion = results.get('spelling_suggestion', None)
+        self._raw_spelling_suggestions = results.get('raw_spelling_suggestions', None)
 
     def run_mlt(self, **kwargs):
         """
@@ -443,6 +446,7 @@ class BaseSearchQuery(object):
         self._hit_count = results.get('hits', 0)
         self._facet_counts = results.get('facets', {})
         self._spelling_suggestion = results.get('spelling_suggestion', None)
+        self._raw_spelling_suggestions = results.get('raw_spelling_suggestions', None)
 
     def get_count(self):
         """
@@ -510,7 +514,7 @@ class BaseSearchQuery(object):
             self.run()
         return self._stats
 
-    def get_spelling_suggestion(self, preferred_query=None):
+    def get_spelling_suggestion(self, preferred_query=None, raw=False):
         """
         Returns the spelling suggestion received from the backend.
 
@@ -520,7 +524,7 @@ class BaseSearchQuery(object):
         if self._spelling_suggestion is None:
             self.run(spelling_query=preferred_query)
 
-        return self._spelling_suggestion
+        return self._spelling_suggestion if not raw else self._raw_spelling_suggestions
 
     def boost_fragment(self, boost_word, boost_value):
         """Generates query fragment for boosting a single word/value pair."""
@@ -830,6 +834,7 @@ class BaseSearchQuery(object):
         self._hit_count = None
         self._facet_counts = None
         self._spelling_suggestion = None
+        self._raw_spelling_suggestions = None
 
     def _clone(self, klass=None, using=None):
         if using is None:

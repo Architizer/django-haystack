@@ -54,6 +54,8 @@ signal_processor = signal_processor_class(connections, connection_router)
 default_search_result_path = getattr(settings, 'HAYSTACK_DEFAULT_SEARCH_RESULT', 'haystack.models.SearchResult')
 DEFAULT_SEARCH_RESULT = loading.import_class(default_search_result_path)
 
+SPELLCHECK_MAX_COLLATIONS = getattr(settings, 'SPELLCHECK_MAX_COLLATIONS', 1)
+
 # Per-request, reset the ghetto query log.
 # Probably not extraordinarily thread-safe but should only matter when
 # DEBUG = True.

@@ -576,6 +576,7 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
         hits = raw_results.get('hits', {}).get('total', 0)
         facets = {}
         spelling_suggestion = None
+        raw_suggest = None
 
         if result_class is None:
             result_class = DEFAULT_SEARCH_RESULT
@@ -646,6 +647,7 @@ class ElasticsearchSearchBackend(BaseSearchBackend):
             'hits': hits,
             'facets': facets,
             'spelling_suggestion': spelling_suggestion,
+            'raw_spelling_suggestion': raw_suggest,
         }
 
     def build_schema(self, fields):
@@ -957,6 +959,7 @@ class ElasticsearchSearchQuery(BaseSearchQuery):
         self._hit_count = results.get('hits', 0)
         self._facet_counts = self.post_process_facets(results)
         self._spelling_suggestion = results.get('spelling_suggestion', None)
+        self._raw_spelling_suggestions = results.get('raw_spelling_suggestion', None)
 
     def run_mlt(self, **kwargs):
         """Builds and executes the query. Returns a list of search results."""

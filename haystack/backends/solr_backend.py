@@ -180,7 +180,8 @@ class SolrSearchBackend(BaseSearchBackend):
         if self.include_spelling is True:
             kwargs['spellcheck'] = 'true'
             kwargs['spellcheck.collate'] = 'true'
-            kwargs['spellcheck.count'] = 1
+            kwargs['spellcheck.count'] = self.spellcheck_max_collations
+            kwargs['spellcheck.maxCollations'] = self.spellcheck_max_collations
 
             if spelling_query:
                 kwargs['spellcheck.q'] = spelling_query
@@ -342,6 +343,7 @@ class SolrSearchBackend(BaseSearchBackend):
         facets = {}
         stats = {}
         spelling_suggestion = None
+        raw_spelling_suggestion = None
 
         if result_class is None:
             result_class = DEFAULT_SEARCH_RESULT
@@ -365,9 +367,11 @@ class SolrSearchBackend(BaseSearchBackend):
         if self.include_spelling is True:
             if hasattr(raw_results, 'spellcheck'):
                 if len(raw_results.spellcheck.get('suggestions', [])):
-                    # For some reason, it's an array of pairs. Pull off the
-                    # collated result from the end.
-                    spelling_suggestion = raw_results.spellcheck.get('suggestions')[-1]
+                    raw_spelling_suggestion = raw_results.spellcheck.get('suggestions')
+                    try:
+                        spelling_suggestion = raw_spelling_suggestion[raw_spelling_suggestion.index('collation') + 1]
+                    except ValueError:
+                        spelling_suggestion = None
 
         unified_index = connections[self.connection_alias].get_unified_index()
         indexed_models = unified_index.get_indexed_models()
@@ -414,6 +418,7 @@ class SolrSearchBackend(BaseSearchBackend):
             'stats': stats,
             'facets': facets,
             'spelling_suggestion': spelling_suggestion,
+            'raw_spelling_suggestion': raw_spelling_suggestion,
         }
 
     def build_schema(self, fields):
@@ -704,6 +709,7 @@ class SolrSearchQuery(BaseSearchQuery):
         self._facet_counts = self.post_process_facets(results)
         self._stats = results.get('stats',{})
         self._spelling_suggestion = results.get('spelling_suggestion', None)
+        self._raw_spelling_suggestions = results.get('raw_spelling_suggestion', None)
 
     def run_mlt(self, **kwargs):
         """Builds and executes the query. Returns a list of search results."""

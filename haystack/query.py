@@ -524,7 +524,7 @@ class SearchQuerySet(object):
             clone = self._clone()
             return clone.query.get_stats()
 
-    def spelling_suggestion(self, preferred_query=None):
+    def spelling_suggestion(self, preferred_query=None, raw=False):
         """
         Returns the spelling suggestion found by the query.
 
@@ -535,10 +535,10 @@ class SearchQuerySet(object):
         presenting the data.
         """
         if self.query.has_run():
-            return self.query.get_spelling_suggestion(preferred_query)
+            return self.query.get_spelling_suggestion(preferred_query, raw)
         else:
             clone = self._clone()
-            return clone.query.get_spelling_suggestion(preferred_query)
+            return clone.query.get_spelling_suggestion(preferred_query, raw)
 
     def values(self, *fields):
         """

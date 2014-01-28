@@ -415,6 +415,7 @@ class WhooshSearchBackend(BaseSearchBackend):
                     'results': [],
                     'hits': 0,
                     'spelling_suggestion': None,
+                    'raw_spelling_suggestion': None,
                 }
 
             results = self._process_results(raw_page, highlight=highlight, query_string=query_string, spelling_query=spelling_query, result_class=result_class)
@@ -437,6 +438,7 @@ class WhooshSearchBackend(BaseSearchBackend):
                 'results': [],
                 'hits': 0,
                 'spelling_suggestion': spelling_suggestion,
+                'raw_spelling_suggestion': None,
             }
 
     def more_like_this(self, model_instance, additional_query_string=None,
@@ -543,6 +545,7 @@ class WhooshSearchBackend(BaseSearchBackend):
                 'results': [],
                 'hits': 0,
                 'spelling_suggestion': None,
+                'raw_spelling_suggestion': None,
             }
 
         results = self._process_results(raw_page, result_class=result_class)
@@ -621,6 +624,7 @@ class WhooshSearchBackend(BaseSearchBackend):
             'hits': hits,
             'facets': facets,
             'spelling_suggestion': spelling_suggestion,
+            'raw_spelling_suggestion': None,
         }
 
     def create_spelling_suggestion(self, query_string):
