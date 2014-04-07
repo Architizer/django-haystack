@@ -364,6 +364,12 @@ class SearchQuerySet(object):
         clone = self._clone()
         clone.query.add_boost(term, boost)
         return clone
+        
+    def group(self, **options):
+        """Adds grouping/collapsing to a query."""
+        clone = self._clone()
+        clone.query.add_group(**options)
+        return clone
 
     def facet(self, field, **options):
         """Adds faceting to a query for the provided field."""
