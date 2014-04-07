@@ -761,7 +761,7 @@ class BaseSearchQuery(object):
         """Adds group/collapse options."""
         for k, v in options.items():
             if self.group.has_key(k):
-                if type(self.group[k]) is list:
+                if isinstance(self.group[k], list):
                     self.group[k].append(v)
                 else:
                     self.group[k] = v

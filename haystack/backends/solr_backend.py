@@ -193,9 +193,9 @@ class SolrSearchBackend(BaseSearchBackend):
                 if group['main']:
                     kwargs['group.main'] = 'true'
                 if group['field']:
-                    kwargs['group.field'] = group['field'][:]
+                    kwargs['group.field'] = group['field']
                 if group['query']:
-                    kwargs['group.query'] = group['query'][:]
+                    kwargs['group.query'] = group['query']
 
         if facets is not None:
             kwargs['facet'] = 'on'
