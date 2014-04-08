@@ -350,6 +350,7 @@ class SolrSearchBackend(BaseSearchBackend):
     def _process_results(self, raw_results, highlight=False, result_class=None, distance_point=None):
         from haystack import connections
         results = []
+        hits = raw_results.hits
         facets = {}
         stats = {}
         spelling_suggestion = None
@@ -419,8 +420,9 @@ class SolrSearchBackend(BaseSearchBackend):
 
                 result = result_class(app_label, model_name, raw_result[DJANGO_ID], raw_result['score'], **additional_fields)
                 results.append(result)
+            else:
+                hits -= 1
 
-        hits = len(results)
 
         return {
             'results': results,
