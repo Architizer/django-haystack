@@ -292,6 +292,12 @@ class BaseSearchQuery(object):
         self.start_offset = 0
         self.end_offset = None
         self.highlight = False
+        self.group = {
+            'group': False,
+            'main': False,
+            'field': [],
+            'query': [],
+        }
         self.facets = {}
         self.date_facets = {}
         self.query_facets = []
@@ -751,6 +757,15 @@ class BaseSearchQuery(object):
             'point': ensure_point(point),
         }
 
+    def add_group(self, **options):
+        """Adds group/collapse options."""
+        for k, v in options.items():
+            if self.group.has_key(k):
+                if isinstance(self.group[k], list):
+                    self.group[k].append(v)
+                else:
+                    self.group[k] = v
+
     def add_field_facet(self, field, **options):
         """Adds a regular facet on a field."""
         from haystack import connections
@@ -853,6 +868,7 @@ class BaseSearchQuery(object):
         clone.boost = self.boost.copy()
         clone.highlight = self.highlight
         clone.stats = self.stats.copy()
+        clone.group = deepcopy(self.group)
         clone.facets = self.facets.copy()
         clone.date_facets = self.date_facets.copy()
         clone.query_facets = self.query_facets[:]

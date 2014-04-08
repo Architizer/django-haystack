@@ -140,7 +140,8 @@ class SolrSearchBackend(BaseSearchBackend):
                             narrow_queries=None, spelling_query=None,
                             within=None, dwithin=None, distance_point=None,
                             models=None, limit_to_registered_models=None,
-                            result_class=None, stats=None, shards=None):
+                            result_class=None, stats=None, shards=None,
+                            group=None):
         kwargs = {'fl': '* score'}
 
         if fields:
@@ -185,6 +186,16 @@ class SolrSearchBackend(BaseSearchBackend):
 
             if spelling_query:
                 kwargs['spellcheck.q'] = spelling_query
+
+        if group is not None:
+            if group['group']:
+                kwargs['group'] = 'true'
+                if group['main']:
+                    kwargs['group.main'] = 'true'
+                if group['field']:
+                    kwargs['group.field'] = group['field']
+                if group['query']:
+                    kwargs['group.query'] = group['query']
 
         if facets is not None:
             kwargs['facet'] = 'on'
@@ -339,7 +350,6 @@ class SolrSearchBackend(BaseSearchBackend):
     def _process_results(self, raw_results, highlight=False, result_class=None, distance_point=None):
         from haystack import connections
         results = []
-        hits = raw_results.hits
         facets = {}
         stats = {}
         spelling_suggestion = None
@@ -409,8 +419,8 @@ class SolrSearchBackend(BaseSearchBackend):
 
                 result = result_class(app_label, model_name, raw_result[DJANGO_ID], raw_result['score'], **additional_fields)
                 results.append(result)
-            else:
-                hits -= 1
+
+        hits = len(results)
 
         return {
             'results': results,
@@ -665,6 +675,9 @@ class SolrSearchQuery(BaseSearchQuery):
 
         if self.end_offset is not None:
             search_kwargs['end_offset'] = self.end_offset
+            
+        if self.group and self.group['group']:
+            search_kwargs['group'] = self.group
 
         if self.facets:
             search_kwargs['facets'] = self.facets
