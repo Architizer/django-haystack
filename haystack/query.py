@@ -1,5 +1,7 @@
+from __future__ import unicode_literals
 import operator
 import warnings
+from django.utils import six
 from haystack import connections, connection_router
 from haystack.backends import SQ
 from haystack.constants import REPR_OUTPUT_SIZE, ITERATOR_LOAD_PER_QUERY, DEFAULT_OPERATOR
@@ -172,7 +174,7 @@ class SearchQuerySet(object):
         # an array of 100,000 ``None``s consumed less than .5 Mb, which ought
         # to be an acceptable loss for consistent and more efficient caching.
         if len(self._result_cache) == 0:
-            self._result_cache = [None for i in xrange(self.query.get_count())]
+            self._result_cache = [None for i in range(self.query.get_count())]
 
         if start is None:
             start = 0
@@ -208,7 +210,7 @@ class SearchQuerySet(object):
                     objects = index.read_queryset(using=self.query._using)
                     loaded_objects[model] = objects.in_bulk(models_pks[model])
                 except NotHandled:
-                    self.log.warning("Model '%s.%s' not handled by the routers.", self.app_label, self.model_name)
+                    self.log.warning("Model '%s' not handled by the routers", model)
                     # Revert to old behaviour
                     loaded_objects[model] = model._default_manager.in_bulk(models_pks[model])
 
@@ -237,7 +239,7 @@ class SearchQuerySet(object):
         """
         Retrieves an item or slice from the set of results.
         """
-        if not isinstance(k, (slice, int, long)):
+        if not isinstance(k, (slice, six.integer_types)):
             raise TypeError
         assert ((not isinstance(k, slice) and (k >= 0))
                 or (isinstance(k, slice) and (k.start is None or k.start >= 0)
@@ -334,7 +336,7 @@ class SearchQuerySet(object):
 
         for model in models:
             if not model in connections[self.query._using].get_unified_index().get_indexed_models():
-                warnings.warn('The model %r is not registered for search.' % model)
+                warnings.warn('The model %r is not registered for search.' % (model,))
 
             clone.query.add_model(model)
 
@@ -364,7 +366,7 @@ class SearchQuerySet(object):
         clone = self._clone()
         clone.query.add_boost(term, boost)
         return clone
-        
+
     def group(self, **options):
         """Adds grouping/collapsing to a query."""
         clone = self._clone()
@@ -399,10 +401,11 @@ class SearchQuerySet(object):
         clone = self._clone()
         stats_facets = []
         try:
-            stats_facets.append(sum(facet_fields,[]))
+            stats_facets.append(sum(facet_fields, []))
         except TypeError:
-            if facet_fields: stats_facets.append(facet_fields)
-        clone.query.add_stats_query(field,stats_facets)
+            if facet_fields:
+                stats_facets.append(facet_fields)
+        clone.query.add_stats_query(field, stats_facets)
         return clone
 
     def distance(self, field, point):
@@ -473,7 +476,7 @@ class SearchQuerySet(object):
                     }
                     query_bits.append(SQ(**kwargs))
 
-        return clone.filter(reduce(operator.__and__, query_bits))
+        return clone.filter(six.moves.reduce(operator.__and__, query_bits))
 
     def using(self, connection_name):
         """
@@ -786,7 +789,7 @@ class RelatedSearchQuerySet(SearchQuerySet):
         """
         Retrieves an item or slice from the set of results.
         """
-        if not isinstance(k, (slice, int, long)):
+        if not isinstance(k, (slice, six.integer_types)):
             raise TypeError
         assert ((not isinstance(k, slice) and (k >= 0))
                 or (isinstance(k, slice) and (k.start is None or k.start >= 0)
