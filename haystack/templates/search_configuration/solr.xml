@@ -16,7 +16,7 @@
  limitations under the License.
 -->
 
-<schema name="default" version="1.4">
+<schema name="default" version="1.5">
   <types>
     <fieldtype name="string"  class="solr.StrField" sortMissingLast="true" omitNorms="true"/>
     <fieldType name="boolean" class="solr.BoolField" sortMissingLast="true" omitNorms="true"/>
@@ -30,6 +30,10 @@
     <fieldType name="float" class="solr.TrieFloatField" precisionStep="0" omitNorms="true" sortMissingLast="true" positionIncrementGap="0"/>
     <fieldType name="long" class="solr.TrieLongField" precisionStep="0" omitNorms="true" sortMissingLast="true" positionIncrementGap="0"/>
     <fieldType name="double" class="solr.TrieDoubleField" precisionStep="0" omitNorms="true" sortMissingLast="true" positionIncrementGap="0"/>
+    <fieldType name="sint" class="solr.SortableIntField" sortMissingLast="true" omitNorms="true"/>
+    <fieldType name="slong" class="solr.SortableLongField" sortMissingLast="true" omitNorms="true"/>
+    <fieldType name="sfloat" class="solr.SortableFloatField" sortMissingLast="true" omitNorms="true"/>
+    <fieldType name="sdouble" class="solr.SortableDoubleField" sortMissingLast="true" omitNorms="true"/>
 
     <fieldType name="tint" class="solr.TrieIntField" precisionStep="8" omitNorms="true" positionIncrementGap="0"/>
     <fieldType name="tfloat" class="solr.TrieFloatField" precisionStep="8" omitNorms="true" positionIncrementGap="0"/>
@@ -129,12 +133,11 @@
   </types>
 
   <fields>
-    <!-- version is required in Solr 4 -->
-    <field name="_version_" type="long" indexed="true" stored ="true"/>
     <!-- general -->
     <field name="{{ ID }}" type="string" indexed="true" stored="true" multiValued="false" required="true"/>
     <field name="{{ DJANGO_CT }}" type="string" indexed="true" stored="true" multiValued="false"/>
     <field name="{{ DJANGO_ID }}" type="string" indexed="true" stored="true" multiValued="false"/>
+    <field name="_version_" type="long" indexed="true" stored ="true"/>
 
     <dynamicField name="*_i"  type="int"    indexed="true"  stored="true"/>
     <dynamicField name="*_s"  type="string"  indexed="true"  stored="true"/>
@@ -148,9 +151,7 @@
     <dynamicField name="*_coordinate"  type="tdouble" indexed="true"  stored="false"/>
 
 {% for field in fields %}
-    {% if field.field_name != ID %}
     <field name="{{ field.field_name }}" type="{{ field.type }}" indexed="{{ field.indexed }}" stored="{{ field.stored }}" multiValued="{{ field.multi_valued }}" />
-    {% endif %}
 {% endfor %}
   </fields>
 

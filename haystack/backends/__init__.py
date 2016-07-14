@@ -1,18 +1,24 @@
 # -*- coding: utf-8 -*-
+from __future__ import unicode_literals
+import copy
 from copy import deepcopy
 from time import time
 from django.conf import settings
 from django.db.models import Q
 from django.db.models.base import ModelBase
+from django.utils import six
 from django.utils import tree
-from django.utils.encoding import force_unicode
-from haystack import DEFAULT_SEARCH_RESULT, SPELLCHECK_MAX_COLLATIONS
+from django.utils.encoding import force_text
+
 from haystack.constants import VALID_FILTERS, FILTER_SEPARATOR, DEFAULT_ALIAS
-from haystack.exceptions import MoreLikeThisError, FacetingError, StatsError
+from haystack.exceptions import MoreLikeThisError, FacetingError
+from haystack.models import SearchResult
 from haystack.utils.loading import UnifiedIndex
+from haystack.utils import get_model_ct
 
 VALID_GAPS = ['year', 'month', 'day', 'hour', 'minute', 'second']
 
+SPELLING_SUGGESTION_HAS_NOT_RUN = object()
 
 def log_query(func):
     """
@@ -67,7 +73,6 @@ class BaseSearchBackend(object):
         self.connection_alias = connection_alias
         self.timeout = connection_options.get('TIMEOUT', 10)
         self.include_spelling = connection_options.get('INCLUDE_SPELLING', False)
-        self.spellcheck_max_collations = SPELLCHECK_MAX_COLLATIONS
         self.batch_size = connection_options.get('BATCH_SIZE', 1000)
         self.silently_fail = connection_options.get('SILENTLY_FAIL', True)
         self.distance_available = connection_options.get('DISTANCE_AVAILABLE', False)
@@ -93,7 +98,7 @@ class BaseSearchBackend(object):
         """
         raise NotImplementedError
 
-    def clear(self, models=[], commit=True):
+    def clear(self, models=None, commit=True):
         """
         Clears the backend of all documents/objects for a collection of models.
 
@@ -110,9 +115,9 @@ class BaseSearchBackend(object):
         The query should be a string that is appropriate syntax for the backend.
 
         The returned dictionary should contain the keys 'results' and 'hits'.
-        The 'results' value should be an iterable of populated instances of
-        ``DEFAULT_SEARCH_RESULT``. The 'hits' should be an integer count of the
-        number of matched results the search backend found.
+        The 'results' value should be an iterable of populated SearchResult
+        objects. The 'hits' should be an integer count of the number of matched
+        results the search backend found.
 
         This method MUST be implemented by each backend, as it will be highly
         specific to each one.
@@ -125,7 +130,7 @@ class BaseSearchBackend(object):
                             narrow_queries=None, spelling_query=None,
                             within=None, dwithin=None, distance_point=None,
                             models=None, limit_to_registered_models=None,
-                            result_class=None):
+                            result_class=None, **extra_kwargs):
         # A convenience method most backends should include in order to make
         # extension easier.
         raise NotImplementedError
@@ -135,7 +140,7 @@ class BaseSearchBackend(object):
         Hook to give the backend a chance to prep an attribute value before
         sending it to the search engine. By default, just force it to unicode.
         """
-        return force_unicode(value)
+        return force_text(value)
 
     def more_like_this(self, model_instance, additional_query_string=None, result_class=None):
         """
@@ -185,7 +190,7 @@ class BaseSearchBackend(object):
         models = []
 
         for model in connections[self.connection_alias].get_unified_index().get_indexed_models():
-            models.append(u"%s.%s" % (model._meta.app_label, model._meta.module_name))
+            models.append(get_model_ct(model))
 
         return models
 
@@ -209,11 +214,162 @@ class SearchNode(tree.Node):
     OR = 'OR'
     default = AND
 
+    # Start compat. Django 1.6 changed how ``tree.Node`` works, so we're going
+    # to patch back in the original implementation until time to rewrite this
+    # presents itself.
+    # See https://github.com/django/django/commit/d3f00bd.
+
+    def __init__(self, children=None, connector=None, negated=False):
+        """
+        Constructs a new Node. If no connector is given, the default will be
+        used.
+
+        Warning: You probably don't want to pass in the 'negated' parameter. It
+        is NOT the same as constructing a node and calling negate() on the
+        result.
+        """
+        self.children = children and children[:] or []
+        self.connector = connector or self.default
+        self.subtree_parents = []
+        self.negated = negated
+
+    # We need this because of django.db.models.query_utils.Q. Q. __init__() is
+    # problematic, but it is a natural Node subclass in all other respects.
+    def _new_instance(cls, children=None, connector=None, negated=False):
+        """
+        This is called to create a new instance of this class when we need new
+        Nodes (or subclasses) in the internal code in this class. Normally, it
+        just shadows __init__(). However, subclasses with an __init__ signature
+        that is not an extension of Node.__init__ might need to implement this
+        method to allow a Node to create a new instance of them (if they have
+        any extra setting up to do).
+        """
+        obj = SearchNode(children, connector, negated)
+        obj.__class__ = cls
+        return obj
+    _new_instance = classmethod(_new_instance)
+
+    def __str__(self):
+        if self.negated:
+            return '(NOT (%s: %s))' % (self.connector, ', '.join([str(c) for c
+                    in self.children]))
+        return '(%s: %s)' % (self.connector, ', '.join([str(c) for c in
+                self.children]))
+
+    def __deepcopy__(self, memodict):
+        """
+        Utility method used by copy.deepcopy().
+        """
+        obj = SearchNode(connector=self.connector, negated=self.negated)
+        obj.__class__ = self.__class__
+        obj.children = copy.deepcopy(self.children, memodict)
+        obj.subtree_parents = copy.deepcopy(self.subtree_parents, memodict)
+        return obj
+
+    def __len__(self):
+        """
+        The size of a node if the number of children it has.
+        """
+        return len(self.children)
+
+    def __bool__(self):
+        """
+        For truth value testing.
+        """
+        return bool(self.children)
+
+    def __nonzero__(self):      # Python 2 compatibility
+        return type(self).__bool__(self)
+
+    def __contains__(self, other):
+        """
+        Returns True is 'other' is a direct child of this instance.
+        """
+        return other in self.children
+
+    def add(self, node, conn_type):
+        """
+        Adds a new node to the tree. If the conn_type is the same as the root's
+        current connector type, the node is added to the first level.
+        Otherwise, the whole tree is pushed down one level and a new root
+        connector is created, connecting the existing tree and the new node.
+        """
+        if node in self.children and conn_type == self.connector:
+            return
+        if len(self.children) < 2:
+            self.connector = conn_type
+        if self.connector == conn_type:
+            if isinstance(node, SearchNode) and (node.connector == conn_type or
+                    len(node) == 1):
+                self.children.extend(node.children)
+            else:
+                self.children.append(node)
+        else:
+            obj = self._new_instance(self.children, self.connector,
+                    self.negated)
+            self.connector = conn_type
+            self.children = [obj, node]
+
+    def negate(self):
+        """
+        Negate the sense of the root connector. This reorganises the children
+        so that the current node has a single child: a negated node containing
+        all the previous children. This slightly odd construction makes adding
+        new children behave more intuitively.
+
+        Interpreting the meaning of this negate is up to client code. This
+        method is useful for implementing "not" arrangements.
+        """
+        self.children = [self._new_instance(self.children, self.connector,
+                not self.negated)]
+        self.connector = self.default
+
+    def start_subtree(self, conn_type):
+        """
+        Sets up internal state so that new nodes are added to a subtree of the
+        current node. The conn_type specifies how the sub-tree is joined to the
+        existing children.
+        """
+        if len(self.children) == 1:
+            self.connector = conn_type
+        elif self.connector != conn_type:
+            self.children = [self._new_instance(self.children, self.connector,
+                    self.negated)]
+            self.connector = conn_type
+            self.negated = False
+
+        self.subtree_parents.append(self.__class__(self.children,
+                self.connector, self.negated))
+        self.connector = self.default
+        self.negated = False
+        self.children = []
+
+    def end_subtree(self):
+        """
+        Closes off the most recently unmatched start_subtree() call.
+
+        This puts the current state into a node of the parent tree and returns
+        the current instances state to be the parent.
+        """
+        obj = self.subtree_parents.pop()
+        node = self.__class__(self.children, self.connector)
+        self.connector = obj.connector
+        self.negated = obj.negated
+        self.children = obj.children
+        self.children.append(node)
+
+    # End compat.
+
     def __repr__(self):
         return '<SQ: %s %s>' % (self.connector, self.as_query_string(self._repr_query_fragment_callback))
 
     def _repr_query_fragment_callback(self, field, filter_type, value):
-        return "%s%s%s=%s" % (field, FILTER_SEPARATOR, filter_type, force_unicode(value).encode('utf8'))
+        if six.PY3:
+            value = force_text(value)
+        else:
+            value = force_text(value).encode('utf8')
+
+        return "%s%s%s=%s" % (field, FILTER_SEPARATOR, filter_type, value)
 
     def as_query_string(self, query_fragment_callback):
         """
@@ -292,12 +448,6 @@ class BaseSearchQuery(object):
         self.start_offset = 0
         self.end_offset = None
         self.highlight = False
-        self.group = {
-            'group': False,
-            'main': False,
-            'field': [],
-            'query': [],
-        }
         self.facets = {}
         self.date_facets = {}
         self.query_facets = []
@@ -320,14 +470,13 @@ class BaseSearchQuery(object):
         self._hit_count = None
         self._facet_counts = None
         self._stats = None
-        self._spelling_suggestion = None
-        self._raw_spelling_suggestions = None
-        self.result_class = DEFAULT_SEARCH_RESULT
+        self._spelling_suggestion = SPELLING_SUGGESTION_HAS_NOT_RUN
+        self.spelling_query = None
+        self.result_class = SearchResult
         self.stats = {}
         from haystack import connections
         self._using = using
         self.backend = connections[self._using].get_backend()
-        self.shards = set()
 
     def __str__(self):
         return self.build_query()
@@ -377,6 +526,8 @@ class BaseSearchQuery(object):
 
         if spelling_query:
             kwargs['spelling_query'] = spelling_query
+        elif self.spelling_query:
+            kwargs['spelling_query'] = self.spelling_query
 
         if self.boost:
             kwargs['boost'] = self.boost
@@ -414,7 +565,6 @@ class BaseSearchQuery(object):
         self._hit_count = results.get('hits', 0)
         self._facet_counts = self.post_process_facets(results)
         self._spelling_suggestion = results.get('spelling_suggestion', None)
-        self._raw_spelling_suggestions = results.get('raw_spelling_suggestions', None)
 
     def run_mlt(self, **kwargs):
         """
@@ -452,7 +602,6 @@ class BaseSearchQuery(object):
         self._hit_count = results.get('hits', 0)
         self._facet_counts = results.get('facets', {})
         self._spelling_suggestion = results.get('spelling_suggestion', None)
-        self._raw_spelling_suggestions = results.get('raw_spelling_suggestions', None)
 
     def get_count(self):
         """
@@ -520,17 +669,20 @@ class BaseSearchQuery(object):
             self.run()
         return self._stats
 
-    def get_spelling_suggestion(self, preferred_query=None, raw=False):
+    def set_spelling_query(self, spelling_query):
+        self.spelling_query = spelling_query
+
+    def get_spelling_suggestion(self, preferred_query=None):
         """
         Returns the spelling suggestion received from the backend.
 
         If the query has not been run, this will execute the query and store
         the results.
         """
-        if self._spelling_suggestion is None:
+        if self._spelling_suggestion is SPELLING_SUGGESTION_HAS_NOT_RUN:
             self.run(spelling_query=preferred_query)
 
-        return self._spelling_suggestion if not raw else self._raw_spelling_suggestions
+        return self._spelling_suggestion
 
     def boost_fragment(self, boost_word, boost_value):
         """Generates query fragment for boosting a single word/value pair."""
@@ -587,7 +739,7 @@ class BaseSearchQuery(object):
 
         A basic (override-able) implementation is provided.
         """
-        if not isinstance(query_fragment, basestring):
+        if not isinstance(query_fragment, six.string_types):
             return query_fragment
 
         words = query_fragment.split()
@@ -649,23 +801,12 @@ class BaseSearchQuery(object):
         """Orders the search result by a field."""
         self.order_by.append(field)
 
-    def add_order_by_distance(self, **kwargs):
-        """Orders the search result by distance from point."""
-        raise NotImplementedError("Subclasses must provide a way to add order by distance in the 'add_order_by_distance' method.")
-
     def clear_order_by(self):
         """
         Clears out all ordering that has been already added, reverting the
         query to relevancy.
         """
         self.order_by = []
-
-    def clear_order_by_distance(self):
-        """
-        Clears out all distance ordering that has been already added, reverting the
-        query to relevancy.
-        """
-        self.order_by_distance = []
 
     def add_model(self, model):
         """
@@ -678,10 +819,6 @@ class BaseSearchQuery(object):
             raise AttributeError('The model being added to the query must derive from Model.')
 
         self.models.add(model)
-
-    def add_shard(self, shard):
-        """Adds shard in to the query"""
-        self.shards.add(shard)
 
     def set_limits(self, low=None, high=None):
         """Restricts the query by altering either the start, end or both offsets."""
@@ -724,9 +861,9 @@ class BaseSearchQuery(object):
         """Adds stats and stats_facets queries for the Solr backend."""
         self.stats[stats_field] = stats_facets
 
-    def add_highlight(self):
+    def add_highlight(self, **kwargs):
         """Adds highlighting to the search results."""
-        self.highlight = True
+        self.highlight = kwargs or True
 
     def add_within(self, field, point_1, point_2):
         """Adds bounding box parameters to search query."""
@@ -756,15 +893,6 @@ class BaseSearchQuery(object):
             'field': field,
             'point': ensure_point(point),
         }
-
-    def add_group(self, **options):
-        """Adds group/collapse options."""
-        for k, v in options.items():
-            if self.group.has_key(k):
-                if isinstance(self.group[k], list):
-                    self.group[k].append(v)
-                else:
-                    self.group[k] = v
 
     def add_field_facet(self, field, **options):
         """Adds a regular facet on a field."""
@@ -804,10 +932,10 @@ class BaseSearchQuery(object):
         Sets the result class to use for results.
 
         Overrides any previous usages. If ``None`` is provided, Haystack will
-        revert back to the default object.
+        revert back to the default ``SearchResult`` object.
         """
         if klass is None:
-            klass = DEFAULT_SEARCH_RESULT
+            klass = SearchResult
 
         self.result_class = klass
 
@@ -848,8 +976,7 @@ class BaseSearchQuery(object):
         self._results = None
         self._hit_count = None
         self._facet_counts = None
-        self._spelling_suggestion = None
-        self._raw_spelling_suggestions = None
+        self._spelling_suggestion = SPELLING_SUGGESTION_HAS_NOT_RUN
 
     def _clone(self, klass=None, using=None):
         if using is None:
@@ -868,7 +995,6 @@ class BaseSearchQuery(object):
         clone.boost = self.boost.copy()
         clone.highlight = self.highlight
         clone.stats = self.stats.copy()
-        clone.group = deepcopy(self.group)
         clone.facets = self.facets.copy()
         clone.date_facets = self.date_facets.copy()
         clone.query_facets = self.query_facets[:]
@@ -881,7 +1007,7 @@ class BaseSearchQuery(object):
         clone.distance_point = self.distance_point.copy()
         clone._raw_query = self._raw_query
         clone._raw_query_params = self._raw_query_params
-        clone.shards = self.shards.copy()
+        clone.spelling_query = self.spelling_query
 
         return clone
 
@@ -906,11 +1032,15 @@ class BaseEngine(object):
             self._backend = self.backend(self.using, **self.options)
         return self._backend
 
+    def reset_sessions(self):
+        """Reset any transient connections, file handles, etc."""
+        self._backend = None
+
     def get_query(self):
         return self.query(using=self.using)
 
     def reset_queries(self):
-        self.queries = []
+        del self.queries[:]
 
     def get_unified_index(self):
         if self._index is None:

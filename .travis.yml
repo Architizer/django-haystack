@@ -1,9 +1,57 @@
+sudo: false
 language: python
 python:
-    - "2.6"
-    - "2.7"
-    - "3.2"
+    - 2.7
+    - 3.4
+    - 3.5
+    - pypy
 
-branches:
-    only:
-        - travis-config
+cache:
+    apt: true
+    pip: true
+    directories:
+        - $HOME/download-cache
+
+addons:
+    apt_packages:
+        - binutils
+        - default-jdk
+        - gdal-bin
+        - libgdal1h
+        - libgeos-c1
+        - libproj-dev
+        - libxapian22
+        - python-xapian
+        - wajig
+
+before_install:
+    - mkdir -p $HOME/download-cache
+
+install:
+    - pip install requests "Django${DJANGO_VERSION}"
+    - python setup.py clean build install
+
+before_script:
+    - BACKGROUND_SOLR=true test_haystack/solr_tests/server/start-solr-test-server.sh
+
+script:
+    - python test_haystack/solr_tests/server/wait-for-solr
+    - python setup.py test
+
+env:
+    matrix:
+        - DJANGO_VERSION=">=1.8,<1.9"
+        - DJANGO_VERSION=">=1.9,<1.10"
+        - DJANGO_VERSION="==1.10a1"
+
+matrix:
+    allow_failures:
+        - env: DJANGO_VERSION="==1.10a1"
+        - python: 'pypy'
+
+services:
+    - elasticsearch
+
+notifications:
+    irc: "irc.freenode.org#haystack"
+    email: false

@@ -1,13 +1,20 @@
+# encoding: utf-8
+
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import copy
 import threading
 import warnings
-from django.utils.encoding import force_unicode
+
 from django.core.exceptions import ImproperlyConfigured
-from haystack import connections, connection_router
-from haystack.constants import ID, DJANGO_CT, DJANGO_ID, Indexable, DEFAULT_ALIAS
+from django.utils.encoding import force_text
+from django.utils.six import with_metaclass
+
+from haystack import connection_router, connections
+from haystack.constants import DEFAULT_ALIAS, DJANGO_CT, DJANGO_ID, ID, Indexable
 from haystack.fields import *
 from haystack.manager import SearchIndexManager
-from haystack.utils import get_identifier, get_facet_field_name
+from haystack.utils import get_facet_field_name, get_identifier, get_model_ct
 
 
 class DeclarativeMetaclass(type):
@@ -39,11 +46,13 @@ class DeclarativeMetaclass(type):
 
                 facet_fields[obj.facet_for].append(field_name)
 
+        built_fields = {}
+
         for field_name, obj in attrs.items():
             if isinstance(obj, SearchField):
-                field = attrs.pop(field_name)
+                field = attrs[field_name]
                 field.set_instance_name(field_name)
-                attrs['fields'][field_name] = field
+                built_fields[field_name] = field
 
                 # Only check non-faceted fields for the following info.
                 if not hasattr(field, 'facet_for'):
@@ -54,10 +63,12 @@ class DeclarativeMetaclass(type):
                             shadow_facet_name = get_facet_field_name(field_name)
                             shadow_facet_field = field.facet_class(facet_for=field_name)
                             shadow_facet_field.set_instance_name(shadow_facet_name)
-                            attrs['fields'][shadow_facet_name] = shadow_facet_field
+                            built_fields[shadow_facet_name] = shadow_facet_field
+
+        attrs['fields'].update(built_fields)
 
         # Assigning default 'objects' query manager if it does not already exist
-        if not attrs.has_key('objects'):
+        if not 'objects' in attrs:
             try:
                 attrs['objects'] = SearchIndexManager(attrs['Meta'].index_label)
             except (KeyError, AttributeError):
@@ -66,7 +77,7 @@ class DeclarativeMetaclass(type):
         return super(DeclarativeMetaclass, cls).__new__(cls, name, bases, attrs)
 
 
-class SearchIndex(threading.local):
+class SearchIndex(with_metaclass(DeclarativeMetaclass, threading.local)):
     """
     Base class for building indexes.
 
@@ -88,13 +99,14 @@ class SearchIndex(threading.local):
                 return self.get_model().objects.filter(pub_date__lte=datetime.datetime.now())
 
     """
-    __metaclass__ = DeclarativeMetaclass
-
     def __init__(self):
         self.prepared_data = None
         content_fields = []
 
+        self.field_map = dict()
         for field_name, field in self.fields.items():
+            #form field map
+            self.field_map[field.index_fieldname] = field_name
             if field.document is True:
                 content_fields.append(field_name)
 
@@ -108,7 +120,7 @@ class SearchIndex(threading.local):
 
         This method is required & you must override it to return the correct class.
         """
-        raise NotImplementedError("You must provide a 'model' method for the '%r' index." % self)
+        raise NotImplementedError("You must provide a 'get_model' method for the '%r' index." % self)
 
     def index_queryset(self, using=None):
         """
@@ -177,8 +189,8 @@ class SearchIndex(threading.local):
         """
         self.prepared_data = {
             ID: get_identifier(obj),
-            DJANGO_CT: "%s.%s" % (obj._meta.app_label, obj._meta.module_name),
-            DJANGO_ID: force_unicode(obj.pk),
+            DJANGO_CT: get_model_ct(obj),
+            DJANGO_ID: force_text(obj.pk),
         }
 
         for field_name, field in self.fields.items():
@@ -247,7 +259,7 @@ class SearchIndex(threading.local):
         backend = self._get_backend(using)
 
         if backend is not None:
-            backend.update(self, self.index_queryset())
+            backend.update(self, self.index_queryset(using=using))
 
     def update_object(self, instance, using=None, **kwargs):
         """
@@ -387,6 +399,8 @@ class ModelSearchIndex(SearchIndex):
     fields_to_skip = (ID, DJANGO_CT, DJANGO_ID, 'content', 'text')
 
     def __init__(self, extra_field_kwargs=None):
+        super(ModelSearchIndex, self).__init__()
+
         self.model = None
 
         self.prepared_data = None

@@ -1,20 +1,19 @@
-import logging
+# encoding: utf-8
+
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
+
 from haystack.constants import DEFAULT_ALIAS
 from haystack import signals
 from haystack.utils import loading
 
 
 __author__ = 'Daniel Lindsley'
-__version__ = (2, 0, 1, 'dev')
+__version__ = (2, 5, 0)
 
-
-# Setup default logging.
-log = logging.getLogger('haystack')
-stream = logging.StreamHandler()
-stream.setLevel(logging.INFO)
-log.addHandler(stream)
+default_app_config = 'haystack.apps.HaystackConfig'
 
 
 # Help people clean up from 1.X.
@@ -37,24 +36,14 @@ if DEFAULT_ALIAS not in settings.HAYSTACK_CONNECTIONS:
 # Load the connections.
 connections = loading.ConnectionHandler(settings.HAYSTACK_CONNECTIONS)
 
-# Load the router(s).
-connection_router = loading.ConnectionRouter()
-
+# Just check HAYSTACK_ROUTERS setting validity, routers will be loaded lazily
 if hasattr(settings, 'HAYSTACK_ROUTERS'):
     if not isinstance(settings.HAYSTACK_ROUTERS, (list, tuple)):
         raise ImproperlyConfigured("The HAYSTACK_ROUTERS setting must be either a list or tuple.")
 
-    connection_router = loading.ConnectionRouter(settings.HAYSTACK_ROUTERS)
+# Load the router(s).
+connection_router = loading.ConnectionRouter()
 
-# Setup the signal processor.
-signal_processor_path = getattr(settings, 'HAYSTACK_SIGNAL_PROCESSOR', 'haystack.signals.BaseSignalProcessor')
-signal_processor_class = loading.import_class(signal_processor_path)
-signal_processor = signal_processor_class(connections, connection_router)
-
-default_search_result_path = getattr(settings, 'HAYSTACK_DEFAULT_SEARCH_RESULT', 'haystack.models.SearchResult')
-DEFAULT_SEARCH_RESULT = loading.import_class(default_search_result_path)
-
-SPELLCHECK_MAX_COLLATIONS = getattr(settings, 'SPELLCHECK_MAX_COLLATIONS', 1)
 
 # Per-request, reset the ghetto query log.
 # Probably not extraordinarily thread-safe but should only matter when

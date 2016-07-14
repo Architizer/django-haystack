@@ -483,15 +483,6 @@ Example::
 
     SearchQuerySet().filter(content='foo').load_all()
 
-``load_all_queryset``
-~~~~~~~~~~~~~~~~~~~~~
-
-.. method:: SearchQuerySet.load_all_queryset(self, model_class, queryset)
-
-Deprecated for removal before Haystack 1.0-final.
-
-Please see the docs on ``RelatedSearchQuerySet``.
-
 ``auto_query``
 ~~~~~~~~~~~~~~
 
@@ -667,11 +658,11 @@ Example::
 ~~~~~~~~~~~~~~~~~
 
 .. method:: SearchQuerySet.stats_results(self):
- 
+
 Returns the stats results found by the query.
 
- This will cause the query to
-execute and should generally be used when presenting the data (template-level).
+This will cause the query to execute and should generally be used when
+presenting the data (template-level).
 
 You receive back a dictionary with three keys: ``fields``, ``dates`` and
 ``queries``. Each contains the facet counts for whatever facets you specified
@@ -695,8 +686,8 @@ Example::
     # {
     #    'stats_fields':{
     #       'author:{
-    #            'min': 0.0, 
-    #            'max': 2199.0,  
+    #            'min': 0.0,
+    #            'max': 2199.0,
     #            'sum': 5251.2699999999995,
     #            'count': 15,
     #            'missing': 11,
@@ -705,8 +696,26 @@ Example::
     #            'stddev': 547.737557906113
     #        }
     #    }
-    #    
+    #
     # }
+
+``set_spelling_query``
+~~~~~~~~~~~~~~~~~~~~~~~
+
+.. method:: SearchQuerySet.set_spelling_query(self, spelling_query)
+
+This method allows you to set the text which will be passed to the backend search engine for spelling
+suggestions. This is helpful when the actual query being sent to the backend has complex syntax which
+should not be seen by the spelling suggestion component.
+
+In this example, a Solr ``edismax`` query is being used to boost field and document weights and
+``set_spelling_query`` is being used to send only the actual user-entered text to the spellchecker::
+
+    alt_q = AltParser('edismax', self.query,
+                      qf='title^4 text provider^0.5',
+                      bq='django_ct:core.item^6.0')
+    sqs = sqs.filter(content=alt_q)
+    sqs = sqs.set_spelling_query(self.query)
 
 
 ``spelling_suggestion``
@@ -717,7 +726,7 @@ Example::
 Returns the spelling suggestion found by the query.
 
 To work, you must set ``INCLUDE_SPELLING`` within your connection's
-settings dictionary to ``True``, and you must rebuild your index afterwards. 
+settings dictionary to ``True``, and you must rebuild your index afterwards.
 Otherwise, ``None`` will be returned.
 
 This method causes the query to evaluate and run the search if it hasn't already
@@ -800,8 +809,9 @@ The following lookup types are supported:
 * in
 * startswith
 * range
+* fuzzy
 
-These options are similar in function to the way Django's lookup types work.
+Except for ``fuzzy`` these options are similar in function to the way Django's lookup types work.
 The actual behavior of these lookups is backend-specific.
 
 .. warning::

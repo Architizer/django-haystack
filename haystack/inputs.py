@@ -1,8 +1,14 @@
+# encoding: utf-8
+
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 import re
 import warnings
-from django.utils.encoding import force_unicode
+
+from django.utils.encoding import force_text, python_2_unicode_compatible
 
 
+@python_2_unicode_compatible
 class BaseInput(object):
     """
     The base input type. Doesn't do much. You want ``Raw`` instead.
@@ -17,8 +23,8 @@ class BaseInput(object):
     def __repr__(self):
         return u"<%s '%s'>" % (self.__class__.__name__, self.__unicode__().encode('utf8'))
 
-    def __unicode__(self):
-        return force_unicode(self.query_string)
+    def __str__(self):
+        return force_text(self.query_string)
 
     def prepare(self, query_obj):
         return self.query_string

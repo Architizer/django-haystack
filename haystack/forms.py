@@ -1,20 +1,28 @@
+# encoding: utf-8
+
+from __future__ import absolute_import, division, print_function, unicode_literals
+
 from django import forms
-from django.db import models
+from django.utils.encoding import smart_text
 from django.utils.text import capfirst
 from django.utils.translation import ugettext_lazy as _
-from django.utils.encoding import smart_unicode
+
 from haystack import connections
 from haystack.constants import DEFAULT_ALIAS
-from haystack.query import SearchQuerySet, EmptySearchQuerySet
+from haystack.query import EmptySearchQuerySet, SearchQuerySet
+from haystack.utils import get_model_ct
+from haystack.utils.app_loading import haystack_get_model
 
 
 def model_choices(using=DEFAULT_ALIAS):
-    choices = [("%s.%s" % (m._meta.app_label, m._meta.module_name), capfirst(smart_unicode(m._meta.verbose_name_plural))) for m in connections[using].get_unified_index().get_indexed_models()]
+    choices = [(get_model_ct(m), capfirst(smart_text(m._meta.verbose_name_plural)))
+               for m in connections[using].get_unified_index().get_indexed_models()]
     return sorted(choices, key=lambda x: x[1])
 
 
 class SearchForm(forms.Form):
-    q = forms.CharField(required=False, label=_('Search'))
+    q = forms.CharField(required=False, label=_('Search'),
+                        widget=forms.TextInput(attrs={'type': 'search'}))
 
     def __init__(self, *args, **kwargs):
         self.searchqueryset = kwargs.pop('searchqueryset', None)
@@ -90,12 +98,12 @@ class ModelSearchForm(SearchForm):
         self.fields['models'] = forms.MultipleChoiceField(choices=model_choices(), required=False, label=_('Search In'), widget=forms.CheckboxSelectMultiple)
 
     def get_models(self):
-        """Return an alphabetical list of model classes in the index."""
+        """Return a list of the selected models."""
         search_models = []
 
         if self.is_valid():
             for model in self.cleaned_data['models']:
-                search_models.append(models.get_model(*model.split('.')))
+                search_models.append(haystack_get_model(*model.split('.')))
 
         return search_models
 
