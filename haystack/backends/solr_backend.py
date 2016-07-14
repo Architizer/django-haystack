@@ -23,6 +23,14 @@ except ImportError:
     raise MissingDependency("The 'solr' backend requires the installation of 'pysolr'. Please refer to the documentation.")
 
 
+
+from haystack.utils import loading
+
+default_search_result_path = getattr(settings, 'HAYSTACK_DEFAULT_SEARCH_RESULT', 'haystack.models.SearchResult')
+DEFAULT_SEARCH_RESULT = loading.import_class(default_search_result_path)
+
+
+
 class SolrSearchBackend(BaseSearchBackend):
     # Word reserved by Solr for special use.
     RESERVED_WORDS = (
@@ -139,7 +147,7 @@ class SolrSearchBackend(BaseSearchBackend):
             self.log.error("Failed to query Solr using '%s': %s", query_string, e, exc_info=True)
             raw_results = EmptyResults()
 
-        return self._process_results(raw_results, highlight=kwargs.get('highlight'), result_class=kwargs.get('result_class', SearchResult), distance_point=kwargs.get('distance_point'))
+        return self._process_results(raw_results, highlight=kwargs.get('highlight'), result_class=kwargs.get('result_class', DEFAULT_SEARCH_RESULT), distance_point=kwargs.get('distance_point'))
 
     def build_search_kwargs(self, query_string, sort_by=None, start_offset=0, end_offset=None,
                             fields='', highlight=False, facets=None,

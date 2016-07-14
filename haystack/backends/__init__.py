@@ -15,6 +15,12 @@ from haystack.exceptions import MoreLikeThisError, FacetingError
 from haystack.models import SearchResult
 from haystack.utils.loading import UnifiedIndex
 from haystack.utils import get_model_ct
+from haystack.utils import loading
+
+default_search_result_path = getattr(settings, 'HAYSTACK_DEFAULT_SEARCH_RESULT', 'haystack.models.SearchResult')
+DEFAULT_SEARCH_RESULT = loading.import_class(default_search_result_path)
+
+
 
 VALID_GAPS = ['year', 'month', 'day', 'hour', 'minute', 'second']
 
@@ -448,6 +454,13 @@ class BaseSearchQuery(object):
         self.start_offset = 0
         self.end_offset = None
         self.highlight = False
+
+        self.group = {
+            'group': False,
+            'main': False,
+            'field': [],
+            'query': [],
+        }        
         self.facets = {}
         self.date_facets = {}
         self.query_facets = []
@@ -472,7 +485,7 @@ class BaseSearchQuery(object):
         self._stats = None
         self._spelling_suggestion = SPELLING_SUGGESTION_HAS_NOT_RUN
         self.spelling_query = None
-        self.result_class = SearchResult
+        self.result_class = DEFAULT_SEARCH_RESULT
         self.stats = {}
         from haystack import connections
         self._using = using
@@ -894,6 +907,17 @@ class BaseSearchQuery(object):
             'point': ensure_point(point),
         }
 
+    def add_group(self, **options):
+        """Adds group/collapse options."""
+        for k, v in options.items():
+            if self.group.has_key(k):
+                if isinstance(self.group[k], list):
+                    self.group[k].append(v)
+                else:
+                    self.group[k] = v
+
+
+
     def add_field_facet(self, field, **options):
         """Adds a regular facet on a field."""
         from haystack import connections
@@ -935,7 +959,7 @@ class BaseSearchQuery(object):
         revert back to the default ``SearchResult`` object.
         """
         if klass is None:
-            klass = SearchResult
+            klass = DEFAULT_SEARCH_RESULT
 
         self.result_class = klass
 
