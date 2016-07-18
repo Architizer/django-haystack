@@ -490,6 +490,7 @@ class BaseSearchQuery(object):
         from haystack import connections
         self._using = using
         self.backend = connections[self._using].get_backend()
+        self.shards = set()
 
     def __str__(self):
         return self.build_query()
@@ -833,6 +834,10 @@ class BaseSearchQuery(object):
 
         self.models.add(model)
 
+    def add_shard(self, shard):
+        """Adds shard in to the query"""
+        self.shards.add(shard)
+
     def set_limits(self, low=None, high=None):
         """Restricts the query by altering either the start, end or both offsets."""
         if low is not None:
@@ -1031,6 +1036,7 @@ class BaseSearchQuery(object):
         clone.distance_point = self.distance_point.copy()
         clone._raw_query = self._raw_query
         clone._raw_query_params = self._raw_query_params
+        clone.shards = self.shards.copy()
         clone.spelling_query = self.spelling_query
 
         return clone

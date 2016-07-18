@@ -367,6 +367,14 @@ class SearchQuerySet(object):
 
         return clone
 
+    def shards(self, *shards):
+        """Accepts an arbitrary number of shards to include in the search."""
+        clone = self._clone()
+
+        for shard in shards:
+            clone.query.add_shard(shard)
+        return clone
+
     def result_class(self, klass):
         """
         Allows specifying a different class to use for results.
