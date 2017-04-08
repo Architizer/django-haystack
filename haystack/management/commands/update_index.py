@@ -73,7 +73,7 @@ def worker(bits):
     index = unified_index.get_index(model)
     backend = haystack_connections[using].get_backend()
 
-    print "Worker Started (by %s)" % (os.getpid(), )
+    print("Worker Started (by %s)" % (os.getpid(), ))
 
     if func == 'do_update':
         qs = index.build_queryset(start_date=start_date, end_date=end_date)
@@ -81,7 +81,7 @@ def worker(bits):
     else:
         raise NotImplementedError('Unknown function %s' % func)
 
-    print "Worker Finished (by %s)" % (os.getpid(), )
+    print("Worker Finished (by %s)" % (os.getpid(), ))
 
 
 def do_update(backend, index, qs, start, end, total, verbosity=1, commit=True):
@@ -239,14 +239,14 @@ class Command(LabelCommand):
                     ghetto_queue.append(('do_update', model, start, end, total, using, self.start_date, self.end_date, self.verbosity, self.commit))
 
             if self.workers > 0:
-                print 'Kicking off %s workers' % (self.workers, )
+                print('Kicking off %s workers' % (self.workers, ))
                 pool = multiprocessing.Pool(self.workers)
                 pool.map(worker, ghetto_queue)
-                print 'Finished mapping against workers.'
+                print('Finished mapping against workers.')
                 pool.close()
                 pool.join()
 
-            print 'Done with workers.'
+            print('Done with workers.')
 
             if self.remove:
                 if self.start_date or self.end_date or total <= 0:
